@@ -1,0 +1,7 @@
+services:
+  worker:
+    build:
+      context: ..
+      dockerfile: samples/RefreshAhead.MemoryCache.Sample/Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Development
