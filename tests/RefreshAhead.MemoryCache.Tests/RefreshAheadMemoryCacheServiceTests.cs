@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
 namespace RefreshAhead.MemoryCache.Tests;
@@ -21,11 +22,7 @@ public sealed class RefreshAheadMemoryCacheServiceTests
             RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1)),
             async (_, ct) => await cache.RefreshAsync(ct),
             runImmediately: true);
-        var service = new RefreshAheadMemoryCacheService(
-            serviceProvider,
-            [job],
-            timeProvider,
-            NullLogger<RefreshAheadMemoryCacheService>.Instance);
+        var service = CreateService(serviceProvider, job, timeProvider);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Act
@@ -50,11 +47,7 @@ public sealed class RefreshAheadMemoryCacheServiceTests
             RefreshAheadSchedule.FixedRate(TimeSpan.FromSeconds(1)),
             async (_, ct) => await cache.RefreshAsync(ct),
             runImmediately: true);
-        var service = new RefreshAheadMemoryCacheService(
-            serviceProvider,
-            [job],
-            timeProvider,
-            NullLogger<RefreshAheadMemoryCacheService>.Instance);
+        var service = CreateService(serviceProvider, job, timeProvider);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Act
@@ -84,11 +77,7 @@ public sealed class RefreshAheadMemoryCacheServiceTests
             RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1)),
             async (_, ct) => await cache.RefreshAsync(ct),
             runImmediately: false);
-        var service = new RefreshAheadMemoryCacheService(
-            serviceProvider,
-            [job],
-            timeProvider,
-            NullLogger<RefreshAheadMemoryCacheService>.Instance);
+        var service = CreateService(serviceProvider, job, timeProvider);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Act
@@ -115,11 +104,7 @@ public sealed class RefreshAheadMemoryCacheServiceTests
             RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1)),
             async (_, ct) => await cache.RefreshAsync(ct),
             runImmediately: true);
-        var service = new RefreshAheadMemoryCacheService(
-            serviceProvider,
-            [job],
-            timeProvider,
-            NullLogger<RefreshAheadMemoryCacheService>.Instance);
+        var service = CreateService(serviceProvider, job, timeProvider);
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         // Act
@@ -170,6 +155,122 @@ public sealed class RefreshAheadMemoryCacheServiceTests
         // Assert
         GetRecordedInstanceIds(gate, instanceIds).Should().HaveCount(2).And.OnlyHaveUniqueItems();
     }
+
+    [Fact]
+    public async Task StartedAsync_WhenWarmUpOnStart_BlocksUntilFirstRefreshSucceeds()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero));
+        var cache = new CountingCache();
+        await using var serviceProvider = CreateServiceProvider(cache);
+        var job = new RefreshAheadMemoryCacheJob(
+            "counting-cache",
+            RefreshAheadSchedule.DailyAt(new TimeOnly(3, 30), TimeZoneInfo.Utc),
+            async (_, ct) => await cache.RefreshAsync(ct),
+            runImmediately: false,
+            warmUpOnStart: true);
+        var service = CreateService(serviceProvider, job, timeProvider);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await ((IHostedLifecycleService)service).StartedAsync(timeout.Token);
+
+        // Assert: warm-up forces an eager first refresh even though RunImmediately is false,
+        // and StartedAsync does not return until that refresh has succeeded.
+        cache.RefreshCount.Should().BeGreaterThanOrEqualTo(1);
+
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartedAsync_WhenWarmUpTimesOut_Throws()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero));
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cache = new BlockingCache(gate.Task);
+        await using var serviceProvider = CreateServiceProvider(cache);
+        var job = new RefreshAheadMemoryCacheJob(
+            "blocking-cache",
+            RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1)),
+            async (_, ct) => await cache.RefreshAsync(ct),
+            runImmediately: true,
+            warmUpOnStart: true);
+        var service = CreateService(
+            serviceProvider,
+            job,
+            timeProvider,
+            options: new RefreshAheadMemoryCacheOptions { WarmUpTimeout = TimeSpan.FromSeconds(5) });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        var startedTask = ((IHostedLifecycleService)service).StartedAsync(CancellationToken.None);
+        await cache.WaitForCountAsync(1, timeout.Token);
+        timeProvider.Advance(TimeSpan.FromSeconds(5));
+
+        // Assert
+        var act = async () => await startedTask;
+        await act.Should().ThrowAsync<TimeoutException>();
+
+        gate.SetResult();
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StatusProvider_TracksSuccessesAndFailures()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero));
+        var cache = new FailsOnceCache();
+        await using var serviceProvider = CreateServiceProvider(cache);
+        var registry = new RefreshAheadMemoryCacheStatusRegistry();
+        var job = new RefreshAheadMemoryCacheJob(
+            "fails-once-cache",
+            RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1)),
+            async (_, ct) => await cache.RefreshAsync(ct),
+            runImmediately: true);
+        var service = CreateService(serviceProvider, job, timeProvider, registry);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await cache.WaitForCountAsync(1, timeout.Token);
+        timeProvider.Advance(TimeSpan.FromSeconds(1));
+        await cache.WaitForCountAsync(2, timeout.Token);
+        await WaitUntilAsync(
+            () => registry.TryGetStatus("fails-once-cache", out var s) && s.SuccessCount >= 1,
+            timeout.Token);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        registry.TryGetStatus("fails-once-cache", out var status).Should().BeTrue();
+        status!.Name.Should().Be("fails-once-cache");
+        status.IsWarm.Should().BeTrue();
+        status.FailureCount.Should().Be(1);
+        status.SuccessCount.Should().Be(1);
+        status.ConsecutiveFailures.Should().Be(0);
+        status.LastError.Should().BeNull();
+        status.LastFailureAt.Should().NotBeNull();
+        status.LastSuccessAt.Should().NotBeNull();
+
+        registry.GetStatuses().Should().ContainSingle().Which.Name.Should().Be("fails-once-cache");
+    }
+
+    private static RefreshAheadMemoryCacheService CreateService(
+        IServiceProvider serviceProvider,
+        IRefreshAheadMemoryCacheJob job,
+        TimeProvider timeProvider,
+        RefreshAheadMemoryCacheStatusRegistry? statusRegistry = null,
+        RefreshAheadMemoryCacheOptions? options = null) =>
+        new(
+            serviceProvider,
+            [job],
+            timeProvider,
+            statusRegistry ?? new RefreshAheadMemoryCacheStatusRegistry(),
+            Options.Create(options ?? new RefreshAheadMemoryCacheOptions()),
+            NullLogger<RefreshAheadMemoryCacheService>.Instance);
 
     private static ServiceProvider CreateServiceProvider<TCache>(TCache cache)
         where TCache : class

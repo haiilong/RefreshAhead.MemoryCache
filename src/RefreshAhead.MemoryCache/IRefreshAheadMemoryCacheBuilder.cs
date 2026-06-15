@@ -23,7 +23,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         string name,
         RefreshAheadSchedule schedule,
         Func<IServiceProvider, CancellationToken, ValueTask> refreshAsync,
-        bool runImmediately = true);
+        bool runImmediately = true,
+        bool warmUpOnStart = false);
 
     /// <summary>
     /// Registers a refresh job for a service resolved from dependency injection.
@@ -32,7 +33,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         RefreshAheadSchedule schedule,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -42,7 +44,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         RefreshAheadSchedule schedule,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -52,7 +55,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         RefreshAheadSchedule schedule,
         Func<TService, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -62,7 +66,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         TimeSpan interval,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -72,7 +77,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         TimeSpan interval,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -82,7 +88,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         TimeSpan interval,
         Func<TService, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -92,7 +99,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         TimeSpan interval,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -102,7 +110,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         TimeSpan interval,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -112,7 +121,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         TimeSpan interval,
         Func<TService, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -123,7 +133,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -134,7 +145,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -145,7 +157,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         Func<TService, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -156,7 +169,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -167,7 +181,8 @@ public interface IRefreshAheadMemoryCacheBuilder
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull;
 
     /// <summary>
@@ -178,6 +193,7 @@ public interface IRefreshAheadMemoryCacheBuilder
         Func<TService, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull;
 }

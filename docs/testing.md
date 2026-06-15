@@ -20,7 +20,11 @@ The package tests cover:
 - non-overlap while a refresh is still running;
 - continuation after refresh failure;
 - fresh DI scope resolution for each delegate-builder refresh registration;
-- source-generated registration of `IRefreshAheadMemoryCache<TSnapshot>` implementations.
+- source-generated registration of `class` and `record` `IRefreshAheadMemoryCache<TSnapshot>` implementations;
+- startup warm-up blocking until the first successful refresh;
+- warm-up timeout surfacing as a `TimeoutException`;
+- status tracking of successes and failures;
+- health-check status transitions (not-warm, degraded, healthy).
 
 ## Consumer tests
 

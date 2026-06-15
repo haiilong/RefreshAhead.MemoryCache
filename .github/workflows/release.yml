@@ -25,11 +25,13 @@ jobs:
         id: version
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
-      - run: dotnet restore src/RefreshAhead.MemoryCache/RefreshAhead.MemoryCache.csproj
+      - run: dotnet restore RefreshAhead.MemoryCache.slnx
 
-      - run: dotnet build src/RefreshAhead.MemoryCache/RefreshAhead.MemoryCache.csproj -c Release --no-restore /p:Version=${{ steps.version.outputs.version }}
+      - run: dotnet build RefreshAhead.MemoryCache.slnx -c Release --no-restore /p:Version=${{ steps.version.outputs.version }}
 
       - run: dotnet pack src/RefreshAhead.MemoryCache/RefreshAhead.MemoryCache.csproj -c Release --no-build -o artifacts /p:Version=${{ steps.version.outputs.version }}
+
+      - run: dotnet pack src/RefreshAhead.MemoryCache.HealthChecks/RefreshAhead.MemoryCache.HealthChecks.csproj -c Release --no-build -o artifacts /p:Version=${{ steps.version.outputs.version }}
 
       - name: Login to NuGet (OIDC)
         id: nuget-login

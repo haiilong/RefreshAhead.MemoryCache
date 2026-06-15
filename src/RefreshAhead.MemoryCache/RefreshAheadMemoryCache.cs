@@ -16,6 +16,9 @@ public abstract class RefreshAheadMemoryCache<TSnapshot>(TSnapshot initialSnapsh
     public virtual bool RunImmediately => true;
 
     /// <inheritdoc />
+    public virtual bool WarmUpOnStart => false;
+
+    /// <inheritdoc />
     public TSnapshot Snapshot => Volatile.Read(ref _snapshot);
 
     /// <inheritdoc />

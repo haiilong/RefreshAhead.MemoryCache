@@ -26,9 +26,11 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
         string name,
         RefreshAheadSchedule schedule,
         Func<IServiceProvider, CancellationToken, ValueTask> refreshAsync,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
     {
-        services.AddSingleton<IRefreshAheadMemoryCacheJob>(new RefreshAheadMemoryCacheJob(name, schedule, refreshAsync, runImmediately));
+        services.AddSingleton<IRefreshAheadMemoryCacheJob>(
+            new RefreshAheadMemoryCacheJob(name, schedule, refreshAsync, runImmediately, warmUpOnStart));
         return this;
     }
 
@@ -36,7 +38,8 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
         RefreshAheadSchedule schedule,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull
     {
         ArgumentNullException.ThrowIfNull(refreshAsync);
@@ -50,14 +53,16 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
                 var service = scope.ServiceProvider.GetRequiredService<TService>();
                 await refreshAsync(service, cancellationToken);
             },
-            runImmediately);
+            runImmediately,
+            warmUpOnStart);
     }
 
     public IRefreshAheadMemoryCacheBuilder Add<TService>(
         RefreshAheadSchedule schedule,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull
     {
         ArgumentNullException.ThrowIfNull(refreshAsync);
@@ -66,14 +71,16 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
             schedule,
             (service, cancellationToken) => new ValueTask(refreshAsync(service, cancellationToken)),
             name,
-            runImmediately);
+            runImmediately,
+            warmUpOnStart);
     }
 
     public IRefreshAheadMemoryCacheBuilder Add<TService>(
         RefreshAheadSchedule schedule,
         Func<TService, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull
     {
         ArgumentNullException.ThrowIfNull(refreshAsync);
@@ -82,108 +89,121 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
             schedule,
             (service, _) => refreshAsync(service),
             name,
-            runImmediately);
+            runImmediately,
+            warmUpOnStart);
     }
 
     public IRefreshAheadMemoryCacheBuilder Every<TService>(
         TimeSpan interval,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.FixedDelay(interval), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.FixedDelay(interval), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder Every<TService>(
         TimeSpan interval,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.FixedDelay(interval), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.FixedDelay(interval), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder Every<TService>(
         TimeSpan interval,
         Func<TService, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.FixedDelay(interval), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.FixedDelay(interval), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder FixedRate<TService>(
         TimeSpan interval,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.FixedRate(interval), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.FixedRate(interval), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder FixedRate<TService>(
         TimeSpan interval,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.FixedRate(interval), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.FixedRate(interval), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder FixedRate<TService>(
         TimeSpan interval,
         Func<TService, Task> refreshAsync,
         string? name = null,
-        bool runImmediately = true)
+        bool runImmediately = true,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.FixedRate(interval), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.FixedRate(interval), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder HourlyAt<TService>(
         TimeSpan offset,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.HourlyAt(offset, timeZone), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.HourlyAt(offset, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder HourlyAt<TService>(
         TimeSpan offset,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.HourlyAt(offset, timeZone), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.HourlyAt(offset, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder HourlyAt<TService>(
         TimeSpan offset,
         Func<TService, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.HourlyAt(offset, timeZone), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.HourlyAt(offset, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder DailyAt<TService>(
         TimeOnly timeOfDay,
         Func<TService, CancellationToken, ValueTask> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder DailyAt<TService>(
         TimeOnly timeOfDay,
         Func<TService, CancellationToken, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
 
     public IRefreshAheadMemoryCacheBuilder DailyAt<TService>(
         TimeOnly timeOfDay,
         Func<TService, Task> refreshAsync,
         string? name = null,
         bool runImmediately = true,
-        TimeZoneInfo? timeZone = null)
+        TimeZoneInfo? timeZone = null,
+        bool warmUpOnStart = false)
         where TService : notnull =>
-        Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately);
+        Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
 }

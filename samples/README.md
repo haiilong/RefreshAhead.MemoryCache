@@ -6,7 +6,7 @@ One worker process with two source-generated refresh-ahead memory caches.
 
 | Cache | Schedule | Notes |
 |---|---|---|
-| `PriceCache` | fixed delay every 1 second | run, then wait |
+| `PriceCache` | fixed delay every 1 second | run, then wait; `WarmUpOnStart = true` so startup blocks until the first load |
 | `ReferenceDataCache` | hourly at 10 seconds past the hour | `RunImmediately = false` |
 
 Both classes derive from `RefreshAheadMemoryCache<TSnapshot>`, which implements `IRefreshAheadMemoryCache<TSnapshot>` and publishes whole snapshots by reference replacement. The sample calls the generated no-argument `AddRefreshAheadMemoryCaches()` method in `Program.cs`.

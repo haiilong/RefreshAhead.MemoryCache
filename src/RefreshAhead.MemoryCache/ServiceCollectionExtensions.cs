@@ -19,10 +19,31 @@ public static class ServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        services.TryAddSingleton(TimeProvider.System);
-        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RefreshAheadMemoryCacheService>());
-
+        AddCore(services);
         configure(new RefreshAheadMemoryCacheBuilder(services));
         return services;
+    }
+
+    /// <summary>
+    /// Registers the refresh-ahead memory cache status provider (<see cref="IRefreshAheadMemoryCacheStatusProvider"/>)
+    /// without adding any cache jobs. Called automatically by <see cref="AddRefreshAheadMemoryCaches"/>; companion
+    /// packages (such as the health check) call it to guarantee the provider is available.
+    /// </summary>
+    public static IServiceCollection AddRefreshAheadMemoryCacheStatusTracking(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.TryAddSingleton<RefreshAheadMemoryCacheStatusRegistry>();
+        services.TryAddSingleton<IRefreshAheadMemoryCacheStatusProvider>(
+            static serviceProvider => serviceProvider.GetRequiredService<RefreshAheadMemoryCacheStatusRegistry>());
+        return services;
+    }
+
+    private static void AddCore(IServiceCollection services)
+    {
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddOptions<RefreshAheadMemoryCacheOptions>();
+        services.AddRefreshAheadMemoryCacheStatusTracking();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RefreshAheadMemoryCacheService>());
     }
 }

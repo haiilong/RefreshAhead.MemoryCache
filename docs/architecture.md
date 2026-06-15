@@ -9,8 +9,8 @@ Both layers feed the same hosted-service runtime.
 
 ## Primary Flow
 
-1. Your project defines one or more concrete caches, usually by deriving from `RefreshAheadMemoryCache<TSnapshot>`.
-2. The source generator finds those classes at compile time.
+1. Your project defines one or more concrete caches, usually by deriving from `RefreshAheadMemoryCache<TSnapshot>`. Both `class` and `record` cache types are supported.
+2. The source generator finds those types at compile time.
 3. The generator emits an internal no-argument `AddRefreshAheadMemoryCaches()` extension into your assembly.
 4. That generated method registers each cache as a singleton and adds one refresh job for it.
 5. `RefreshAheadMemoryCacheService` starts one async loop per job.
@@ -55,6 +55,16 @@ Because caches are singleton, constructor dependencies must be singleton-safe. I
 ## Non-Overlap
 
 There is no queue. A job loop awaits the current refresh before scheduling the next run. That gives the same practical protection as Quartz's `DisallowConcurrentExecution` for a single in-process cache job.
+
+## Startup Warm-Up
+
+The hosted service implements `IHostedLifecycleService`. Refresh loops start in `ExecuteAsync` as usual; warm-up is awaited in `StartedAsync`, after every loop has started and before the host is reported as started.
+
+For a job with `WarmUpOnStart = true`, the first refresh runs eagerly (the initial delay for `RunImmediately = false` is skipped) and the loop signals completion only on the first **successful** refresh. `StartedAsync` awaits those signals for all warm-up jobs, bounded by `RefreshAheadMemoryCacheOptions.WarmUpTimeout`. A timeout surfaces as a `TimeoutException` from startup.
+
+## Status Tracking
+
+A singleton `RefreshAheadMemoryCacheStatusRegistry` holds one entry per job. The hosted service records the start, success, or failure of every refresh into that entry. The registry is exposed publicly as `IRefreshAheadMemoryCacheStatusProvider`, and the bundled `IHealthCheck` reads from the same source. Status updates happen once per refresh and never touch the read path.
 
 ## Delegate Builder
 

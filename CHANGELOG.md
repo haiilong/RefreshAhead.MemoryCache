@@ -1,5 +1,34 @@
 # Changelog
 
+## 1.1.0 - 2026-06-15
+
+Adds startup warm-up, refresh observability, and a health check. Fully backward compatible: existing caches and registrations keep working unchanged.
+
+### Startup warm-up
+
+- Add `WarmUpOnStart` to `IRefreshAheadMemoryCache<TSnapshot>` (default `false`) and to every delegate-builder overload. When `true`, the first refresh runs eagerly on startup (regardless of `RunImmediately`) and host startup blocks until that refresh succeeds.
+- Implement `IHostedLifecycleService` so warm-up gating happens after all refresh loops have started and before the host is reported as started.
+- Add `RefreshAheadMemoryCacheOptions.WarmUpTimeout`. When set, startup fails with a `TimeoutException` if warm-up does not complete in time; when `null` (default), startup waits indefinitely, bounded only by the host startup cancellation token. Configure with `services.Configure<RefreshAheadMemoryCacheOptions>(...)`.
+
+### Refresh observability
+
+- Add `IRefreshAheadMemoryCacheStatusProvider` (registered as a singleton) exposing `RefreshAheadMemoryCacheStatus` per cache job: `IsWarm`, last refresh start/success/failure times, last error message, and refresh/success/failure/consecutive-failure counts.
+- The hosted service records start, success, and failure for every refresh, covering both interface caches and delegate-builder jobs.
+
+### Health check (new companion package: `RefreshAhead.MemoryCache.HealthChecks` 1.1.0)
+
+- Add `RefreshAheadMemoryCacheHealthCheck` and `IHealthChecksBuilder.AddRefreshAheadMemoryCaches(...)` in a separate package so the core library stays lightweight. Reports Unhealthy while any cache is not yet warm, Degraded when a warm cache is serving stale data after a failed refresh, and Healthy otherwise. Per-cache state is included in the health-check data.
+- The core package adds only `Microsoft.Extensions.Options` (required by warm-up). The `Microsoft.Extensions.Diagnostics.HealthChecks` dependency lives in the companion package.
+- Add the public `IServiceCollection.AddRefreshAheadMemoryCacheStatusTracking()` extension so the companion package (and consumers) can register the status provider independently.
+
+### Source generator
+
+- Discover `record` (record class) cache types in addition to `class` types. Record structs and other value types are not registered.
+
+### 1.0.0 compatibility
+
+- No breaking changes. New interface members are default-implemented; new builder parameters are optional.
+
 ## 1.0.0 - 2026-05-26
 
 First stable release.

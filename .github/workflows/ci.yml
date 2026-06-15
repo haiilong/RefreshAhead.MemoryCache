@@ -28,6 +28,8 @@ jobs:
 
       - run: dotnet pack src/RefreshAhead.MemoryCache/RefreshAhead.MemoryCache.csproj -c Release --no-build -o artifacts
 
+      - run: dotnet pack src/RefreshAhead.MemoryCache.HealthChecks/RefreshAhead.MemoryCache.HealthChecks.csproj -c Release --no-build -o artifacts
+
       - uses: actions/upload-artifact@v6
         if: always()
         with:

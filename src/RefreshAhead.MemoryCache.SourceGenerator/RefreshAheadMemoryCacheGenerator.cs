@@ -27,7 +27,7 @@ public sealed class RefreshAheadMemoryCacheGenerator : IIncrementalGenerator
     {
         var cacheTypes = context.SyntaxProvider
             .CreateSyntaxProvider(
-                predicate: static (node, _) => IsCandidateClass(node),
+                predicate: static (node, _) => IsCandidateType(node),
                 transform: static (ctx, _) => GetCacheRegistrationOrNull(ctx))
             .Where(static registration => registration is not null)
             .Select(static (registration, _) => registration!)
@@ -36,30 +36,33 @@ public sealed class RefreshAheadMemoryCacheGenerator : IIncrementalGenerator
         context.RegisterSourceOutput(cacheTypes, Emit);
     }
 
-    private static bool IsCandidateClass(SyntaxNode node)
+    private static bool IsCandidateType(SyntaxNode node)
     {
-        if (node is not ClassDeclarationSyntax classDeclaration)
+        // Match both `class` and `record class` declarations. Record structs are filtered out by the
+        // IsValueType check in the semantic pass below.
+        if (node is not TypeDeclarationSyntax typeDeclaration ||
+            typeDeclaration is not (ClassDeclarationSyntax or RecordDeclarationSyntax))
         {
             return false;
         }
 
-        if (classDeclaration.BaseList is null || classDeclaration.BaseList.Types.Count == 0)
+        if (typeDeclaration.BaseList is null || typeDeclaration.BaseList.Types.Count == 0)
         {
             return false;
         }
 
-        return classDeclaration.Modifiers.All(modifier => modifier.ValueText != "abstract");
+        return typeDeclaration.Modifiers.All(modifier => modifier.ValueText != "abstract");
     }
 
     private static CacheRegistration? GetCacheRegistrationOrNull(GeneratorSyntaxContext context)
     {
-        var classDeclaration = (ClassDeclarationSyntax)context.Node;
-        if (context.SemanticModel.GetDeclaredSymbol(classDeclaration) is not INamedTypeSymbol symbol)
+        var typeDeclaration = (TypeDeclarationSyntax)context.Node;
+        if (context.SemanticModel.GetDeclaredSymbol(typeDeclaration) is not INamedTypeSymbol symbol)
         {
             return null;
         }
 
-        if (symbol.IsAbstract || symbol.IsStatic || symbol.IsGenericType)
+        if (symbol.IsAbstract || symbol.IsStatic || symbol.IsGenericType || symbol.IsValueType)
         {
             return null;
         }
@@ -111,7 +114,7 @@ public sealed class RefreshAheadMemoryCacheGenerator : IIncrementalGenerator
         builder.AppendLine("namespace RefreshAhead.MemoryCache;");
         builder.AppendLine();
         builder.AppendLine("/// <summary>Source-generated, trimming- and AOT-safe registration for every refresh-ahead memory cache discovered in the compilation.</summary>");
-        builder.AppendLine("[System.CodeDom.Compiler.GeneratedCode(\"RefreshAhead.MemoryCache.SourceGenerator\", \"1.0.0\")]");
+        builder.AppendLine("[System.CodeDom.Compiler.GeneratedCode(\"RefreshAhead.MemoryCache.SourceGenerator\", \"1.1.0\")]");
         builder.AppendLine("internal static class RefreshAheadMemoryCacheGeneratedRegistration");
         builder.AppendLine("{");
         builder.AppendLine("    /// <summary>");

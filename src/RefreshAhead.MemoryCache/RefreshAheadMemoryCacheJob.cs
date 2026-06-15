@@ -8,6 +8,8 @@ internal interface IRefreshAheadMemoryCacheJob
 
     bool RunImmediately { get; }
 
+    bool WarmUpOnStart { get; }
+
     ValueTask RefreshAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken);
 }
 
@@ -24,14 +26,16 @@ internal sealed class RefreshAheadMemoryCacheJob : IRefreshAheadMemoryCacheJob
             name,
             cache.Schedule,
             (_, cancellationToken) => cache.RefreshCacheAsync(cancellationToken),
-            cache.RunImmediately);
+            cache.RunImmediately,
+            cache.WarmUpOnStart);
     }
 
     public RefreshAheadMemoryCacheJob(
         string name,
         RefreshAheadSchedule schedule,
         Func<IServiceProvider, CancellationToken, ValueTask> refreshAsync,
-        bool runImmediately)
+        bool runImmediately,
+        bool warmUpOnStart = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(schedule);
@@ -41,6 +45,7 @@ internal sealed class RefreshAheadMemoryCacheJob : IRefreshAheadMemoryCacheJob
         Schedule = schedule;
         _refreshAsync = refreshAsync;
         RunImmediately = runImmediately;
+        WarmUpOnStart = warmUpOnStart;
     }
 
     public string Name { get; }
@@ -48,6 +53,8 @@ internal sealed class RefreshAheadMemoryCacheJob : IRefreshAheadMemoryCacheJob
     public RefreshAheadSchedule Schedule { get; }
 
     public bool RunImmediately { get; }
+
+    public bool WarmUpOnStart { get; }
 
     public ValueTask RefreshAsync(IServiceProvider serviceProvider, CancellationToken cancellationToken) =>
         _refreshAsync(serviceProvider, cancellationToken);

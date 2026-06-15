@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="src/RefreshAhead.MemoryCache/RefreshAhead.MemoryCache.csproj" />
+  <Project Path="src/RefreshAhead.MemoryCache.HealthChecks/RefreshAhead.MemoryCache.HealthChecks.csproj" />
   <Project Path="src/RefreshAhead.MemoryCache.SourceGenerator/RefreshAhead.MemoryCache.SourceGenerator.csproj" />
   <Project Path="samples/RefreshAhead.MemoryCache.Sample/RefreshAhead.MemoryCache.Sample.csproj" />
   <Project Path="tests/RefreshAhead.MemoryCache.Tests/RefreshAhead.MemoryCache.Tests.csproj" />

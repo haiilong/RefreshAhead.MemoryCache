@@ -17,6 +17,14 @@ public interface IRefreshAheadMemoryCache<out TSnapshot>
     bool RunImmediately => true;
 
     /// <summary>
+    /// Gets whether host startup should block until this cache completes its first successful refresh.
+    /// When <c>true</c>, the first refresh runs eagerly on startup regardless of <see cref="RunImmediately"/>,
+    /// and the host is not considered started until that refresh succeeds (bounded by
+    /// <see cref="RefreshAheadMemoryCacheOptions.WarmUpTimeout"/>). Defaults to <c>false</c>.
+    /// </summary>
+    bool WarmUpOnStart => false;
+
+    /// <summary>
     /// Gets the current in-memory snapshot.
     /// </summary>
     TSnapshot Snapshot { get; }

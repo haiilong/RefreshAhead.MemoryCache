@@ -2,7 +2,7 @@
 
 The package is `IsAotCompatible=true` and `IsTrimmable=true`.
 
-The important design choice is compile-time discovery. The bundled Roslyn source generator finds concrete `IRefreshAheadMemoryCache<TSnapshot>` implementations and emits registration code into your app. There is no runtime `Assembly.GetTypes()` scan.
+The important design choice is compile-time discovery. The bundled Roslyn source generator finds concrete `IRefreshAheadMemoryCache<TSnapshot>` implementations — `class` or `record` types — and emits registration code into your app. There is no runtime `Assembly.GetTypes()` scan.
 
 ## Generated Method
 
@@ -24,7 +24,7 @@ namespace RefreshAhead.MemoryCache;
 
 [System.CodeDom.Compiler.GeneratedCode(
     "RefreshAhead.MemoryCache.SourceGenerator",
-    "1.0.0")]
+    "1.1.0")]
 internal static class RefreshAheadMemoryCacheGeneratedRegistration
 {
     internal static IServiceCollection AddRefreshAheadMemoryCaches(

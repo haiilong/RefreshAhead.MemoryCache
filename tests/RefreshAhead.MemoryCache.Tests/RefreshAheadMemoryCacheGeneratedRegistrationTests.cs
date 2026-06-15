@@ -51,6 +51,24 @@ public sealed class RefreshAheadMemoryCacheGeneratedRegistrationTests
         cache.Snapshot.Should().Equal(1, 2, 3);
         cache.PublishCount.Should().Be(1);
     }
+
+    [Fact]
+    public void AddRefreshAheadMemoryCaches_DiscoversRecordCaches()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton<TimeProvider>(new FakeTimeProvider());
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddRefreshAheadMemoryCaches();
+
+        using var serviceProvider = services.BuildServiceProvider();
+
+        // Assert: a `record` cache is discovered by the source generator just like a `class` cache.
+        serviceProvider.GetService<GeneratedRecordCache>().Should().NotBeNull();
+        serviceProvider.GetService<IRefreshAheadMemoryCache<string>>()
+            .Should()
+            .BeOfType<GeneratedRecordCache>();
+    }
 }
 
 internal sealed class GeneratedRefreshAheadCache : IRefreshAheadMemoryCache<int>
@@ -75,6 +93,17 @@ internal sealed class GeneratedRefreshAheadCache : IRefreshAheadMemoryCache<int>
             await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
         }
     }
+}
+
+internal sealed record GeneratedRecordCache : IRefreshAheadMemoryCache<string>
+{
+    public RefreshAheadSchedule Schedule => RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1));
+
+    public bool RunImmediately => false;
+
+    public string Snapshot => "record";
+
+    public ValueTask RefreshCacheAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
 }
 
 internal sealed class GeneratedBaseClassCache()

@@ -62,6 +62,8 @@ public override bool RunImmediately => false;
 
 That keeps the first run aligned to the wall-clock schedule.
 
+If such a cache also sets `WarmUpOnStart = true`, the first refresh still runs eagerly on startup so the host can wait for it; subsequent runs follow the wall-clock schedule. See [Warm-up and health](warm-up-and-health.md).
+
 ## DailyAt
 
 `DailyAt` runs once per day at a local time.

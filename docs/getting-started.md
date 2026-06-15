@@ -56,7 +56,7 @@ builder.Services.AddRefreshAheadMemoryCaches();
 await builder.Build().RunAsync();
 ```
 
-`AddRefreshAheadMemoryCaches()` is generated at compile time. It appears after the first build and registers every concrete cache class found in the current project.
+`AddRefreshAheadMemoryCaches()` is generated at compile time. It appears after the first build and registers every concrete cache type (`class` or `record`) found in the current project.
 
 ## 3. Read the Cache
 
@@ -102,6 +102,40 @@ Set it to `false` when another startup path warms the cache or when an hourly/da
 
 ```csharp
 public override bool RunImmediately => false;
+```
+
+To guarantee the cache is loaded **before** the host accepts traffic, set `WarmUpOnStart`. Host startup then blocks until the first refresh succeeds:
+
+```csharp
+public override bool WarmUpOnStart => true;
+```
+
+Bound the wait so an unavailable upstream fails startup instead of hanging:
+
+```csharp
+builder.Services.Configure<RefreshAheadMemoryCacheOptions>(options =>
+    options.WarmUpTimeout = TimeSpan.FromSeconds(30));
+```
+
+See [Warm-up and health](warm-up-and-health.md) for details.
+
+## Observing Caches
+
+Resolve `IRefreshAheadMemoryCacheStatusProvider` to inspect refresh history (warm-up state, last success/failure, counts):
+
+```csharp
+public sealed class CacheStatusEndpoint(IRefreshAheadMemoryCacheStatusProvider statuses)
+{
+    public IReadOnlyList<RefreshAheadMemoryCacheStatus> GetAll() => statuses.GetStatuses();
+}
+```
+
+Add a health check to surface warm-up and refresh state to orchestrators (from the companion `RefreshAhead.MemoryCache.HealthChecks` package):
+
+```csharp
+builder.Services
+    .AddHealthChecks()
+    .AddRefreshAheadMemoryCaches();
 ```
 
 ## Scoped Dependencies

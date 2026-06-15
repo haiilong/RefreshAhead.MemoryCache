@@ -67,7 +67,7 @@ builder.Services.AddRefreshAheadMemoryCaches();
 await builder.Build().RunAsync();
 ```
 
-`AddRefreshAheadMemoryCaches()` is emitted by the bundled Roslyn source generator. It discovers every concrete `IRefreshAheadMemoryCache<TSnapshot>` implementation in your compilation and registers it without reflection.
+`AddRefreshAheadMemoryCaches()` is emitted by the bundled Roslyn source generator. It discovers every concrete `IRefreshAheadMemoryCache<TSnapshot>` implementation in your compilation — `class` or `record` — and registers it without reflection.
 
 > First build required: because the method is generated, a fresh project may show `CS1061` in the IDE until you run `dotnet build` once.
 
@@ -79,6 +79,8 @@ public interface IRefreshAheadMemoryCache<out TSnapshot>
     RefreshAheadSchedule Schedule { get; }
 
     bool RunImmediately => true;
+
+    bool WarmUpOnStart => false;
 
     TSnapshot Snapshot { get; }
 
@@ -239,6 +241,7 @@ For daylight-saving gaps, invalid local times are advanced minute by minute unti
 - `FixedDelay` schedules from completion time.
 - `FixedRate` skips missed ticks and schedules the next future tick.
 - `RunImmediately` defaults to `true`.
+- `WarmUpOnStart` defaults to `false`; when `true`, host startup blocks until the first refresh succeeds.
 - Host shutdown cancels pending delays and refresh delegates that observe cancellation.
 - Generated cache registrations are singleton and process-local.
 - The library does not coordinate across pods.
@@ -284,11 +287,62 @@ public async ValueTask RefreshCacheAsync(CancellationToken cancellationToken)
 
 See [Failure policy](docs/failure-policy.md) for more patterns.
 
+## Startup Warm-Up
+
+By default the host starts immediately and refreshes run in the background, so there is a brief window where `Snapshot` returns the initial value while traffic is already served.
+
+Set `WarmUpOnStart` to block host startup until the cache has loaded once:
+
+```csharp
+public override bool WarmUpOnStart => true;
+```
+
+When `true`, the first refresh runs eagerly (even if `RunImmediately` is `false`) and the host is not reported as started until that refresh succeeds. Bound the wait with a timeout so an unavailable upstream fails startup instead of hanging:
+
+```csharp
+builder.Services.Configure<RefreshAheadMemoryCacheOptions>(options =>
+    options.WarmUpTimeout = TimeSpan.FromSeconds(30));
+```
+
+When `WarmUpTimeout` elapses before warm-up completes, startup throws a `TimeoutException`. The delegate builder accepts a `warmUpOnStart` argument on every overload.
+
+## Cache Status
+
+Resolve `IRefreshAheadMemoryCacheStatusProvider` (registered automatically) to observe each cache's refresh history:
+
+```csharp
+public sealed class CacheStatusEndpoint(IRefreshAheadMemoryCacheStatusProvider statuses)
+{
+    public IReadOnlyList<RefreshAheadMemoryCacheStatus> GetAll() => statuses.GetStatuses();
+}
+```
+
+Each `RefreshAheadMemoryCacheStatus` reports `IsWarm`, last refresh start/success/failure times, the last error message, and refresh/success/failure/consecutive-failure counts, for both interface caches and delegate-builder jobs.
+
+## Health Checks
+
+The health check ships as a separate package so the core library stays lightweight and does not force a health-checks dependency on consumers that do not need it:
+
+```sh
+dotnet add package RefreshAhead.MemoryCache.HealthChecks
+```
+
+```csharp
+builder.Services
+    .AddHealthChecks()
+    .AddRefreshAheadMemoryCaches();
+```
+
+It reports Unhealthy while any cache has never refreshed successfully, Degraded when a warm cache is serving stale data after a failed refresh, and Healthy otherwise. Per-cache state is included in the health-check data.
+
+See [Warm-up and health](docs/warm-up-and-health.md) for the full reference.
+
 ## Logging
 
 | Event | Level |
 |---|---|
 | Job start / stop | Information |
+| Warm-up waiting / completed | Information |
 | Per-refresh start / success | Debug |
 | Refresh exception | Error |
 
@@ -306,6 +360,7 @@ See [AOT and source generation](docs/aot.md) for details.
 |---|---|
 | [Getting started](docs/getting-started.md) | Primary API, generated registration, app-specific interfaces |
 | [Scheduling](docs/scheduling.md) | `FixedDelay`, `FixedRate`, `HourlyAt`, `DailyAt` behavior |
+| [Warm-up and health](docs/warm-up-and-health.md) | `WarmUpOnStart`, status provider, health check |
 | [Architecture](docs/architecture.md) | Hosted service loops, generated registration, delegate builder |
 | [AOT and source generation](docs/aot.md) | How the generator works and how to troubleshoot generated output |
 | [Failure policy](docs/failure-policy.md) | Last-good, reset-on-failure, and reset-after-N-failures patterns |

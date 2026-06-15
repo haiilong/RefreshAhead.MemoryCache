@@ -7,6 +7,12 @@ public sealed partial class PriceCache(TimeProvider timeProvider, ILogger<PriceC
 {
     public override RefreshAheadSchedule Schedule => RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1));
 
+    // WarmUpOnStart is opt-in and defaults to false; most caches should leave it off and rely on a
+    // readiness health check instead. This cache turns it on because serving an empty price table would
+    // produce wrong answers, not just a cold start, so the host should not accept traffic until the first
+    // load succeeds. In production, pair it with RefreshAheadMemoryCacheOptions.WarmUpTimeout.
+    public override bool WarmUpOnStart => true;
+
     protected override async ValueTask<IReadOnlyDictionary<string, decimal>> RefreshSnapshotAsync(
         CancellationToken cancellationToken)
     {

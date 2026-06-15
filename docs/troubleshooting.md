@@ -21,12 +21,13 @@ When developing this repository with `ProjectReference`, samples and tests must 
 
 ## My cache was not auto-registered
 
-The generator only registers concrete, non-abstract, non-generic classes that implement `IRefreshAheadMemoryCache<TSnapshot>`.
+The generator only registers concrete, non-abstract, non-generic `class` or `record` types that implement `IRefreshAheadMemoryCache<TSnapshot>`.
 
 It does not register:
 
 - abstract base caches;
 - open generic cache types;
+- record structs or other value types;
 - classes that only expose a `RefreshCacheAsync` method but do not implement the interface;
 - cache classes from a referenced assembly.
 
@@ -78,9 +79,24 @@ Per-refresh start and completion logs are `Debug`. Failures are `Error`. Raise t
 }
 ```
 
+## My host hangs on startup
+
+A cache with `WarmUpOnStart = true` blocks host startup until its first refresh **succeeds**. If the upstream is unavailable, startup waits.
+
+- Set a bound with `services.Configure<RefreshAheadMemoryCacheOptions>(o => o.WarmUpTimeout = ...)`. On timeout, startup fails with a `TimeoutException` instead of hanging.
+- Remove `WarmUpOnStart` if the cache does not need to be ready before traffic.
+
+## My host fails to start with a `TimeoutException`
+
+Warm-up did not complete within `WarmUpTimeout`. Either the first refresh keeps failing or it is slower than the timeout. Check the `Error`-level refresh logs and the cache's status (`IRefreshAheadMemoryCacheStatusProvider`) for the last error, and raise the timeout or fix the upstream.
+
+## My health check is always unhealthy
+
+The health check reports Unhealthy while any cache has never refreshed successfully (`IsWarm == false`). On a fresh start that is expected until the first refresh completes. If it never clears, the refresh is failing — check the `Error` logs and the cache status. Use `WarmUpOnStart` plus a readiness probe filtered on a tag if you want the pod to report not-ready until caches are warm.
+
 ## My first refresh runs immediately
 
-`runImmediately` defaults to `true`. Set it to `false` for hourly/daily jobs or when another startup path warms the cache.
+`runImmediately` defaults to `true`. Set it to `false` for hourly/daily jobs or when another startup path warms the cache. Note that `WarmUpOnStart = true` forces an eager first refresh regardless of `RunImmediately`.
 
 For the primary interface API:
 

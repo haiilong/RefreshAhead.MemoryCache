@@ -127,7 +127,10 @@ The library owns:
 - non-overlap;
 - DI registration;
 - cancellation;
-- refresh failure logging.
+- refresh failure logging;
+- refresh status tracking (`IRefreshAheadMemoryCacheStatusProvider`) and the bundled health check.
+
+Even though the library does not change your snapshot on failure, failures are observable: each failed refresh increments `FailureCount` / `ConsecutiveFailures` and records `LastError` on the cache's status, and the health check reports Degraded while a warm cache is serving stale data. See [Warm-up and health](warm-up-and-health.md).
 
 The cache owns:
 
