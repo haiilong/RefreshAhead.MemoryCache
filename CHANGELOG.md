@@ -1,8 +1,37 @@
 # Changelog
 
+## 1.1.1 - 2026-07-31
+
+Hardens scheduling, registration, warm-up, and health reporting after the 1.1.0 release.
+
+### Reliability
+
+- Observe unexpected scheduling/loop exceptions immediately: mark the loop faulted, fail any pending warm-up gate, log at `Critical`, and request host shutdown instead of leaving one cache silently frozen behind `Task.WhenAll`.
+- Chunk waits longer than the platform timer limit, and clamp fixed-delay/fixed-rate date arithmetic at `DateTimeOffset.MaxValue` instead of throwing on overflow.
+- Preserve both occurrences of an ambiguous `HourlyAt` time during a daylight-saving fall-back.
+- Validate that `WarmUpTimeout`, when set, is greater than zero. Warm-up wait and timeout diagnostics now name the blocking cache jobs.
+- Avoid capturing a consumer `SynchronizationContext` from library awaits; CA2007 is enforced for shipping source.
+
+### Registration
+
+- Make repeated registration of the same concrete cache idempotent, preventing duplicate refresh loops.
+- Reject duplicate job names during registration and again when runtime status entries are created.
+- Register cache interfaces by keyed job name. When multiple caches share one snapshot type, unkeyed `IRefreshAheadMemoryCache<TSnapshot>` resolution now fails with guidance instead of silently returning whichever cache was registered last.
+
+### Status and health
+
+- Add `WarmUpOnStart`, `IsRefreshing`, `IsRefreshLoopFaulted`, `LastRefreshDuration`, `NextScheduledRunAt`, and `RefreshLoopError` to `RefreshAheadMemoryCacheStatus`.
+- Treat a delayed first-run cache as healthy until its first scheduled run is due, while reporting faulted loops through the configured failure status.
+- Add health-check overloads for cache-name scoping and a maximum age for the last successful refresh.
+
+### Packaging and compatibility
+
+- Enable NuGet package validation against the 1.1.0 baseline for both packages.
+- Correct the 1.1.0 compatibility note: adding optional `warmUpOnStart` parameters preserved source compatibility, but changed interface method signatures and was not binary compatible for already-compiled 1.0.0 callers. Future options will be introduced with additive overloads rather than by widening existing interface methods.
+
 ## 1.1.0 - 2026-06-15
 
-Adds startup warm-up, refresh observability, and a health check. Fully backward compatible: existing caches and registrations keep working unchanged.
+Adds startup warm-up, refresh observability, and a health check. Existing source continues to compile unchanged.
 
 ### Startup warm-up
 
@@ -27,7 +56,7 @@ Adds startup warm-up, refresh observability, and a health check. Fully backward 
 
 ### 1.0.0 compatibility
 
-- No breaking changes. New interface members are default-implemented; new builder parameters are optional.
+- `WarmUpOnStart` on the cache interface is default-implemented and source compatible. The optional builder parameters are source compatible but changed the interface method signatures, so already-compiled libraries that call the 1.0.0 builder interface must be recompiled against 1.1.x.
 
 ## 1.0.0 - 2026-05-26
 

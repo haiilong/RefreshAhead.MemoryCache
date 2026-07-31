@@ -110,7 +110,7 @@ The base class calls `RefreshSnapshotAsync`, then publishes the returned snapsho
 
 Implement the interface directly when you need custom refresh behavior, value-type snapshots, or a specialized failure policy.
 
-Cache names used in logs are inferred from the concrete cache type name, such as `PriceCache`. The generated registration passes that name as a compile-time string literal. Manual builder registration still accepts an explicit `name` when you want a different log label.
+Cache names used in logs are inferred from the concrete cache type name, such as `PriceCache`. The generated registration passes that name as a compile-time string literal. Manual builder registration still accepts an explicit `name` when you want a different log label. Job names must be unique; duplicate names fail during registration instead of sharing status counters.
 
 ### Why the Schedule Lives on the Cache
 
@@ -150,6 +150,15 @@ builder.Services.AddRefreshAheadMemoryCaches();
 ```
 
 The generated registration owns `PriceCache` as the singleton cache instance; your interface points at the same object.
+
+The package also registers `IRefreshAheadMemoryCache<TSnapshot>` keyed by the cache job name:
+
+```csharp
+var prices = serviceProvider.GetRequiredKeyedService<
+    IRefreshAheadMemoryCache<IReadOnlyDictionary<string, decimal>>>("PriceCache");
+```
+
+Unkeyed interface resolution is available when exactly one cache owns a snapshot type. If multiple caches use the same `TSnapshot`, unkeyed resolution throws rather than silently selecting one; inject the concrete cache or resolve the keyed interface. Repeating the same concrete cache registration is idempotent and does not create another refresh loop.
 
 ## Source-Generated Registration
 
@@ -231,13 +240,15 @@ public RefreshAheadSchedule Schedule =>
     RefreshAheadSchedule.DailyAt(new TimeOnly(3, 30), TimeZoneInfo.Utc);
 ```
 
-For daylight-saving gaps, invalid local times are advanced minute by minute until a valid local time is reached.
+For daylight-saving gaps, invalid local times are advanced minute by minute until a valid local time is reached. During a fall-back, `HourlyAt` schedules both occurrences of an ambiguous local time, preserving the hourly cadence.
 
 ## Runtime Semantics
 
 - One loop is created per registered refresh cache/job.
 - A cache never overlaps itself.
-- Exceptions are logged and the loop continues on the next scheduled run.
+- Refresh exceptions are logged and the loop continues on the next scheduled run.
+- An unexpected scheduler/loop exception is marked in status, logged at `Critical`, and requests host shutdown instead of silently leaving a frozen cache.
+- Delays longer than the platform timer limit are split into safe chunks.
 - `FixedDelay` schedules from completion time.
 - `FixedRate` skips missed ticks and schedules the next future tick.
 - `RunImmediately` defaults to `true`.
@@ -317,7 +328,7 @@ public sealed class CacheStatusEndpoint(IRefreshAheadMemoryCacheStatusProvider s
 }
 ```
 
-Each `RefreshAheadMemoryCacheStatus` reports `IsWarm`, last refresh start/success/failure times, the last error message, and refresh/success/failure/consecutive-failure counts, for both interface caches and delegate-builder jobs.
+Each `RefreshAheadMemoryCacheStatus` reports `IsWarm`, `WarmUpOnStart`, `IsRefreshing`, `IsRefreshLoopFaulted`, last refresh start/success/failure times, last refresh duration, next scheduled run, refresh-loop/attempt errors, and refresh/success/failure/consecutive-failure counts, for both interface caches and delegate-builder jobs.
 
 ## Health Checks
 
@@ -333,7 +344,23 @@ builder.Services
     .AddRefreshAheadMemoryCaches();
 ```
 
-It reports Unhealthy while any cache has never refreshed successfully, Degraded when a warm cache is serving stale data after a failed refresh, and Healthy otherwise. Per-cache state is included in the health-check data.
+It reports the configured failure status when a cache is overdue and not warm or its loop has faulted, Degraded when a warm cache is serving stale data after a failed refresh, and Healthy otherwise. A cache configured with `RunImmediately = false` remains Healthy until its first scheduled run is due. Per-cache state is included in the health-check data.
+
+Scope a check to critical caches:
+
+```csharp
+builder.Services.AddHealthChecks().AddRefreshAheadMemoryCaches(
+    cacheNames: ["PriceCache", "ReferenceDataCache"],
+    name: "critical-caches",
+    tags: ["ready"]);
+```
+
+Or report Degraded when the last successful refresh is too old:
+
+```csharp
+builder.Services.AddHealthChecks().AddRefreshAheadMemoryCaches(
+    maxAge: TimeSpan.FromMinutes(10));
+```
 
 See [Warm-up and health](docs/warm-up-and-health.md) for the full reference.
 
@@ -343,8 +370,10 @@ See [Warm-up and health](docs/warm-up-and-health.md) for the full reference.
 |---|---|
 | Job start / stop | Information |
 | Warm-up waiting / completed | Information |
+| Warm-up timeout | Error |
 | Per-refresh start / success | Debug |
 | Refresh exception | Error |
+| Unexpected refresh-loop termination | Critical |
 
 Per-refresh logs are `Debug` so high-frequency refresh loops do not flood `Information` logs.
 

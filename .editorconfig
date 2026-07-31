@@ -14,3 +14,6 @@ dotnet_style_qualification_for_event = false:suggestion
 
 csharp_style_namespace_declarations = file_scoped:suggestion
 csharp_style_prefer_primary_constructors = true:suggestion
+
+[src/**/*.cs]
+dotnet_diagnostic.CA2007.severity = error

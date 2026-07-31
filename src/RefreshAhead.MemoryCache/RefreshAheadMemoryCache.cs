@@ -24,7 +24,7 @@ public abstract class RefreshAheadMemoryCache<TSnapshot>(TSnapshot initialSnapsh
     /// <inheritdoc />
     public virtual async ValueTask RefreshCacheAsync(CancellationToken cancellationToken)
     {
-        var next = await RefreshSnapshotAsync(cancellationToken);
+        var next = await RefreshSnapshotAsync(cancellationToken).ConfigureAwait(false);
         PublishSnapshot(next);
     }
 

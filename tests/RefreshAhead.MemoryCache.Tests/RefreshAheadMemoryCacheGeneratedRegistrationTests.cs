@@ -39,6 +39,57 @@ public sealed class RefreshAheadMemoryCacheGeneratedRegistrationTests
     }
 
     [Fact]
+    public void AddRefreshAheadMemoryCaches_WhenCacheRegisteredTwice_IsIdempotent()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        services.AddRefreshAheadMemoryCaches(refresh => refresh.Add<NestedCacheA, int>());
+        services.AddRefreshAheadMemoryCaches(refresh => refresh.Add<NestedCacheA, int>());
+        using var serviceProvider = services.BuildServiceProvider();
+
+        // Assert
+        serviceProvider.GetServices<IRefreshAheadMemoryCacheJob>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void AddRefreshAheadMemoryCaches_WhenJobNamesCollide_Throws()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+
+        // Act
+        var act = () => services.AddRefreshAheadMemoryCaches(refresh => refresh
+            .Add<NestedCacheA, int>("duplicate")
+            .Add<NestedCacheB, int>("duplicate"));
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Job names must be unique*");
+    }
+
+    [Fact]
+    public void AddRefreshAheadMemoryCaches_WhenSnapshotTypesCollide_RequiresConcreteOrKeyedResolution()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddRefreshAheadMemoryCaches(refresh => refresh
+            .Add<NestedCacheA, int>("cache-a")
+            .Add<NestedCacheB, int>("cache-b"));
+        using var serviceProvider = services.BuildServiceProvider();
+
+        // Act
+        var act = () => serviceProvider.GetRequiredService<IRefreshAheadMemoryCache<int>>();
+
+        // Assert
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Multiple refresh-ahead memory caches*");
+        serviceProvider.GetRequiredKeyedService<IRefreshAheadMemoryCache<int>>("cache-a")
+            .Should().BeSameAs(serviceProvider.GetRequiredService<NestedCacheA>());
+        serviceProvider.GetRequiredKeyedService<IRefreshAheadMemoryCache<int>>("cache-b")
+            .Should().BeSameAs(serviceProvider.GetRequiredService<NestedCacheB>());
+    }
+
+    [Fact]
     public async Task RefreshAheadMemoryCacheBase_PublishesReturnedSnapshot()
     {
         // Arrange
@@ -68,6 +119,24 @@ public sealed class RefreshAheadMemoryCacheGeneratedRegistrationTests
         serviceProvider.GetService<IRefreshAheadMemoryCache<string>>()
             .Should()
             .BeOfType<GeneratedRecordCache>();
+    }
+
+    private sealed class NestedCacheA : IRefreshAheadMemoryCache<int>
+    {
+        public RefreshAheadSchedule Schedule => RefreshAheadSchedule.FixedDelay(TimeSpan.FromMinutes(1));
+
+        public int Snapshot => 1;
+
+        public ValueTask RefreshCacheAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    }
+
+    private sealed class NestedCacheB : IRefreshAheadMemoryCache<int>
+    {
+        public RefreshAheadSchedule Schedule => RefreshAheadSchedule.FixedDelay(TimeSpan.FromMinutes(1));
+
+        public int Snapshot => 2;
+
+        public ValueTask RefreshCacheAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 }
 

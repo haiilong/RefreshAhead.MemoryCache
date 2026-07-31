@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
+        services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<RefreshAheadMemoryCacheStatusRegistry>();
         services.TryAddSingleton<IRefreshAheadMemoryCacheStatusProvider>(
             static serviceProvider => serviceProvider.GetRequiredService<RefreshAheadMemoryCacheStatusRegistry>());
@@ -41,8 +42,10 @@ public static class ServiceCollectionExtensions
 
     private static void AddCore(IServiceCollection services)
     {
-        services.TryAddSingleton(TimeProvider.System);
-        services.AddOptions<RefreshAheadMemoryCacheOptions>();
+        services.AddOptions<RefreshAheadMemoryCacheOptions>()
+            .Validate(
+                static options => options.WarmUpTimeout is null || options.WarmUpTimeout > TimeSpan.Zero,
+                $"{nameof(RefreshAheadMemoryCacheOptions.WarmUpTimeout)} must be greater than zero when set.");
         services.AddRefreshAheadMemoryCacheStatusTracking();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IHostedService, RefreshAheadMemoryCacheService>());
     }

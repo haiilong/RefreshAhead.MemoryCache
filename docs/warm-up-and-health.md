@@ -81,7 +81,11 @@ public sealed class CacheStatusEndpoint(IRefreshAheadMemoryCacheStatusProvider s
 |---|---|
 | `Name` | The job name (concrete cache type name by default). |
 | `IsWarm` | `true` once at least one refresh has succeeded. While `false`, callers still read the initial snapshot. |
-| `LastRefreshStartedAt` | UTC start time of the most recent attempt. |
+| `WarmUpOnStart` | Whether this cache gates host startup until its first success. |
+| `IsRefreshing` | Whether a refresh attempt is currently running. |
+| `IsRefreshLoopFaulted` / `RefreshLoopError` | Whether the scheduler loop terminated unexpectedly and its error message. |
+| `LastRefreshStartedAt` / `LastRefreshDuration` | UTC start time and duration of the most recent attempt. |
+| `NextScheduledRunAt` | UTC time of the next scheduled attempt, or `null` while refreshing or stopped. |
 | `LastSuccessAt` / `LastFailureAt` | UTC time of the most recent success / failure. |
 | `LastError` | Message of the most recent failure, or `null` if the last refresh succeeded. Full exceptions are logged at `Error`. |
 | `RefreshCount` / `SuccessCount` / `FailureCount` | Lifetime counters. |
@@ -107,11 +111,11 @@ The check reports:
 
 | Status | When |
 |---|---|
-| Unhealthy (or the configured failure status) | any cache has never refreshed successfully and is still serving its initial snapshot. |
-| Degraded | every cache is warm, but at least one is serving stale data after a failed refresh (`ConsecutiveFailures > 0`). |
-| Healthy | every cache is warm and its most recent refresh succeeded. |
+| Unhealthy (or the configured failure status) | a refresh loop faulted, or a cache is not warm after it was due to run. |
+| Degraded | a warm cache's latest attempt failed, or its last success exceeds an optional maximum age. |
+| Healthy | caches are operating normally; this includes delayed-first-run caches that are not due yet. |
 
-Per-cache state (`isWarm`, `lastSuccessAt`, `lastFailureAt`, `consecutiveFailures`, `lastError`) is included in the health-check `data` for diagnostics.
+Per-cache state, including running/faulted state, duration, next run, timestamps, counters, and errors, is included in the health-check `data` for diagnostics.
 
 You can customize the registration:
 
@@ -124,7 +128,23 @@ builder.Services
         tags: ["ready"]);
 ```
 
-Tagging with `ready` and mapping a readiness endpoint that filters on that tag pairs naturally with `WarmUpOnStart`: the pod reports not-ready until its caches are warm.
+Tagging with `ready` and mapping a readiness endpoint that filters on that tag pairs naturally with `WarmUpOnStart`: the pod reports not-ready until its warm-up caches are ready.
+
+Scope readiness to critical caches while keeping best-effort caches out of that probe:
+
+```csharp
+builder.Services.AddHealthChecks().AddRefreshAheadMemoryCaches(
+    cacheNames: ["PriceCache", "ReferenceDataCache"],
+    name: "critical-caches",
+    tags: ["ready"]);
+```
+
+Add a maximum staleness threshold for all caches:
+
+```csharp
+builder.Services.AddHealthChecks().AddRefreshAheadMemoryCaches(
+    maxAge: TimeSpan.FromMinutes(10));
+```
 
 ## How They Fit Together
 

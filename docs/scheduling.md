@@ -75,4 +75,4 @@ public RefreshAheadSchedule Schedule =>
         TimeZoneInfo.Utc);
 ```
 
-For daylight-saving gaps, invalid local times are advanced minute by minute until a valid local time is reached.
+For daylight-saving gaps, invalid local times are advanced minute by minute until a valid local time is reached. During a fall-back, `HourlyAt` schedules both occurrences of an ambiguous local time so the hourly cadence is preserved; `DailyAt` runs once using the time zone's standard-offset occurrence.

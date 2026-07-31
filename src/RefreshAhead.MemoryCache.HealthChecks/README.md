@@ -24,11 +24,11 @@ It reports:
 
 | Status | When |
 |---|---|
-| Unhealthy (or the configured failure status) | any cache has never refreshed successfully and is still serving its initial snapshot. |
-| Degraded | every cache is warm, but at least one is serving stale data after a failed refresh. |
-| Healthy | every cache is warm and its most recent refresh succeeded. |
+| Unhealthy (or the configured failure status) | a refresh loop faulted, or a cache is not warm after it was due to run. |
+| Degraded | a warm cache's latest attempt failed, or its last success exceeds an optional maximum age. |
+| Healthy | caches are operating normally, including delayed-first-run caches that are not due yet. |
 
-Per-cache state (`isWarm`, `lastSuccessAt`, `lastFailureAt`, `consecutiveFailures`, `lastError`) is included in the health-check data.
+Per-cache running/faulted state, duration, next run, timestamps, counters, and errors are included in the health-check data.
 
 Customize the registration:
 
@@ -42,6 +42,22 @@ builder.Services
 ```
 
 Tagging with `ready` and mapping a readiness endpoint filtered on that tag pairs naturally with `WarmUpOnStart`: the pod reports not-ready until its caches are warm.
+
+Scope a check to critical caches:
+
+```csharp
+builder.Services.AddHealthChecks().AddRefreshAheadMemoryCaches(
+    cacheNames: ["PriceCache", "ReferenceDataCache"],
+    name: "critical-caches",
+    tags: ["ready"]);
+```
+
+Or configure a maximum age for the last successful refresh:
+
+```csharp
+builder.Services.AddHealthChecks().AddRefreshAheadMemoryCaches(
+    maxAge: TimeSpan.FromMinutes(10));
+```
 
 See the [main package documentation](https://github.com/haiilong/RefreshAhead.MemoryCache/blob/main/docs/warm-up-and-health.md) for details.
 

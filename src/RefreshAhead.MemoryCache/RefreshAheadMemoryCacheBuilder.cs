@@ -12,12 +12,69 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
         string? name = null)
         where TCache : class, IRefreshAheadMemoryCache<TSnapshot>
     {
+        var jobName = name ?? typeof(TCache).Name;
+        var existingCacheRegistration = GetRegistrations()
+            .FirstOrDefault(registration => registration.CacheType == typeof(TCache));
+        if (existingCacheRegistration is not null)
+        {
+            if (existingCacheRegistration.SnapshotType != typeof(TSnapshot))
+            {
+                throw new InvalidOperationException(
+                    $"Cache type '{typeof(TCache)}' is already registered with snapshot type '{existingCacheRegistration.SnapshotType}' and cannot also be registered with '{typeof(TSnapshot)}'.");
+            }
+
+            if (StringComparer.Ordinal.Equals(existingCacheRegistration.Name, jobName))
+            {
+                return this;
+            }
+
+            throw new InvalidOperationException(
+                $"Cache type '{typeof(TCache)}' is already registered as job '{existingCacheRegistration.Name}' and cannot also be registered as '{jobName}'.");
+        }
+
+        EnsureUniqueJobName(jobName);
         services.TryAddSingleton<TCache>();
-        services.AddSingleton<IRefreshAheadMemoryCache<TSnapshot>>(serviceProvider => serviceProvider.GetRequiredService<TCache>());
+        services.AddKeyedSingleton<IRefreshAheadMemoryCache<TSnapshot>>(
+            jobName,
+            static (serviceProvider, _) => serviceProvider.GetRequiredService<TCache>());
+
+        ServiceDescriptor? aliasDescriptor = null;
+        var snapshotRegistrations = GetRegistrations()
+            .Where(registration => registration.SnapshotType == typeof(TSnapshot))
+            .ToArray();
+        if (snapshotRegistrations.Length == 0)
+        {
+            aliasDescriptor = ServiceDescriptor.Singleton(
+                typeof(IRefreshAheadMemoryCache<TSnapshot>),
+                static serviceProvider => serviceProvider.GetRequiredService<TCache>());
+            services.Add(aliasDescriptor);
+        }
+        else
+        {
+            foreach (var registration in snapshotRegistrations)
+            {
+                if (registration.AliasDescriptor is not null)
+                {
+                    services.Remove(registration.AliasDescriptor);
+                }
+            }
+
+            if (!GetSnapshotCollisions().Any(collision => collision.SnapshotType == typeof(TSnapshot)))
+            {
+                var collisionDescriptor = ServiceDescriptor.Singleton(
+                    typeof(IRefreshAheadMemoryCache<TSnapshot>),
+                    _ => throw new InvalidOperationException(
+                        $"Multiple refresh-ahead memory caches use snapshot type '{typeof(TSnapshot)}'. Resolve the concrete cache type or use GetRequiredKeyedService with the cache job name."));
+                services.Add(collisionDescriptor);
+                services.AddSingleton(new SnapshotAliasCollision(typeof(TSnapshot)));
+            }
+        }
+
         services.AddSingleton<IRefreshAheadMemoryCacheJob>(
             serviceProvider => RefreshAheadMemoryCacheJob.Create(
                 serviceProvider.GetRequiredService<TCache>(),
-                name ?? typeof(TCache).Name));
+                jobName));
+        services.AddSingleton(new CacheRegistration(typeof(TCache), typeof(TSnapshot), jobName, aliasDescriptor));
 
         return this;
     }
@@ -29,8 +86,10 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
         bool runImmediately = true,
         bool warmUpOnStart = false)
     {
+        EnsureUniqueJobName(name);
         services.AddSingleton<IRefreshAheadMemoryCacheJob>(
             new RefreshAheadMemoryCacheJob(name, schedule, refreshAsync, runImmediately, warmUpOnStart));
+        services.AddSingleton(new CacheRegistration(null, null, name, null));
         return this;
     }
 
@@ -49,9 +108,12 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
             schedule,
             async (serviceProvider, cancellationToken) =>
             {
-                await using var scope = serviceProvider.CreateAsyncScope();
-                var service = scope.ServiceProvider.GetRequiredService<TService>();
-                await refreshAsync(service, cancellationToken);
+                var scope = serviceProvider.CreateAsyncScope();
+                await using (scope.ConfigureAwait(false))
+                {
+                    var service = scope.ServiceProvider.GetRequiredService<TService>();
+                    await refreshAsync(service, cancellationToken).ConfigureAwait(false);
+                }
             },
             runImmediately,
             warmUpOnStart);
@@ -206,4 +268,32 @@ internal sealed class RefreshAheadMemoryCacheBuilder(IServiceCollection services
         bool warmUpOnStart = false)
         where TService : notnull =>
         Add(RefreshAheadSchedule.DailyAt(timeOfDay, timeZone), refreshAsync, name, runImmediately, warmUpOnStart);
+
+    private IEnumerable<CacheRegistration> GetRegistrations() =>
+        services
+            .Where(static descriptor => descriptor.ServiceType == typeof(CacheRegistration))
+            .Select(static descriptor => (CacheRegistration)descriptor.ImplementationInstance!);
+
+    private IEnumerable<SnapshotAliasCollision> GetSnapshotCollisions() =>
+        services
+            .Where(static descriptor => descriptor.ServiceType == typeof(SnapshotAliasCollision))
+            .Select(static descriptor => (SnapshotAliasCollision)descriptor.ImplementationInstance!);
+
+    private void EnsureUniqueJobName(string name)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        if (GetRegistrations().Any(registration => StringComparer.Ordinal.Equals(registration.Name, name)))
+        {
+            throw new InvalidOperationException(
+                $"A refresh-ahead memory cache job named '{name}' is already registered. Job names must be unique.");
+        }
+    }
+
+    private sealed record CacheRegistration(
+        Type? CacheType,
+        Type? SnapshotType,
+        string Name,
+        ServiceDescriptor? AliasDescriptor);
+
+    private sealed record SnapshotAliasCollision(Type SnapshotType);
 }

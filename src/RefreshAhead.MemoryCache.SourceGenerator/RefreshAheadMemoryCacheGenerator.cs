@@ -114,7 +114,7 @@ public sealed class RefreshAheadMemoryCacheGenerator : IIncrementalGenerator
         builder.AppendLine("namespace RefreshAhead.MemoryCache;");
         builder.AppendLine();
         builder.AppendLine("/// <summary>Source-generated, trimming- and AOT-safe registration for every refresh-ahead memory cache discovered in the compilation.</summary>");
-        builder.AppendLine("[System.CodeDom.Compiler.GeneratedCode(\"RefreshAhead.MemoryCache.SourceGenerator\", \"1.1.0\")]");
+        builder.AppendLine("[System.CodeDom.Compiler.GeneratedCode(\"RefreshAhead.MemoryCache.SourceGenerator\", \"1.1.1\")]");
         builder.AppendLine("internal static class RefreshAheadMemoryCacheGeneratedRegistration");
         builder.AppendLine("{");
         builder.AppendLine("    /// <summary>");

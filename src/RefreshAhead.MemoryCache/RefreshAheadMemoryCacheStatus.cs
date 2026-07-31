@@ -17,9 +17,34 @@ public sealed record RefreshAheadMemoryCacheStatus
     public bool IsWarm => SuccessCount > 0;
 
     /// <summary>
+    /// Gets whether this cache must complete its first refresh before host startup completes.
+    /// </summary>
+    public bool WarmUpOnStart { get; init; }
+
+    /// <summary>
+    /// Gets whether a refresh attempt is currently running.
+    /// </summary>
+    public bool IsRefreshing { get; init; }
+
+    /// <summary>
+    /// Gets whether the refresh loop terminated unexpectedly.
+    /// </summary>
+    public bool IsRefreshLoopFaulted { get; init; }
+
+    /// <summary>
     /// Gets the UTC time the most recent refresh attempt started, or <c>null</c> if none has started.
     /// </summary>
     public DateTimeOffset? LastRefreshStartedAt { get; init; }
+
+    /// <summary>
+    /// Gets the duration of the most recently completed refresh attempt, or <c>null</c> if none has completed.
+    /// </summary>
+    public TimeSpan? LastRefreshDuration { get; init; }
+
+    /// <summary>
+    /// Gets the UTC time at which the next refresh is scheduled, or <c>null</c> when refreshing or stopped.
+    /// </summary>
+    public DateTimeOffset? NextScheduledRunAt { get; init; }
 
     /// <summary>
     /// Gets the UTC time of the most recent successful refresh, or <c>null</c> if none has succeeded.
@@ -36,6 +61,11 @@ public sealed record RefreshAheadMemoryCacheStatus
     /// or none has run. The full exception is written to the logs at <c>Error</c> level.
     /// </summary>
     public string? LastError { get; init; }
+
+    /// <summary>
+    /// Gets the unexpected refresh-loop termination message, or <c>null</c> while the loop is operating normally.
+    /// </summary>
+    public string? RefreshLoopError { get; init; }
 
     /// <summary>
     /// Gets the total number of refresh attempts that have started.

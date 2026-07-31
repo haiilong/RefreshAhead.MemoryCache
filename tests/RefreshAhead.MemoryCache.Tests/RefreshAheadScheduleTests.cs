@@ -65,6 +65,37 @@ public sealed class RefreshAheadScheduleTests
     }
 
     [Fact]
+    public void HourlyAt_DstFallBack_SchedulesBothAmbiguousOccurrences()
+    {
+        // Arrange
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+        var schedule = RefreshAheadSchedule.HourlyAt(TimeSpan.Zero, timeZone);
+        var beforeFirstOccurrence = new DateTimeOffset(2025, 11, 2, 4, 0, 0, TimeSpan.Zero);
+
+        // Act
+        var firstOccurrence = schedule.GetNextRun(beforeFirstOccurrence, null, null);
+        var secondOccurrence = schedule.GetNextRun(firstOccurrence, firstOccurrence, firstOccurrence);
+
+        // Assert
+        firstOccurrence.Should().Be(new DateTimeOffset(2025, 11, 2, 5, 0, 0, TimeSpan.Zero));
+        secondOccurrence.Should().Be(new DateTimeOffset(2025, 11, 2, 6, 0, 0, TimeSpan.Zero));
+    }
+
+    [Fact]
+    public void FixedRate_WhenNextTickWouldOverflow_ClampsToMaximumValue()
+    {
+        // Arrange
+        var schedule = RefreshAheadSchedule.FixedRate(TimeSpan.FromDays(2));
+        var previousScheduledRun = DateTimeOffset.MaxValue.AddDays(-1);
+
+        // Act
+        var nextRun = schedule.GetNextRun(previousScheduledRun, previousScheduledRun, previousScheduledRun);
+
+        // Assert
+        nextRun.Should().Be(DateTimeOffset.MaxValue);
+    }
+
+    [Fact]
     public void DailyAt_SchedulesNextDailyTime()
     {
         // Arrange

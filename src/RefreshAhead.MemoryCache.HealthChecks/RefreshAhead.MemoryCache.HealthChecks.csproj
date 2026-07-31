@@ -4,12 +4,14 @@
         <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
 
         <PackageId>RefreshAhead.MemoryCache.HealthChecks</PackageId>
-        <Version>1.1.0</Version>
+        <Version>1.1.1</Version>
         <Description>Health check for RefreshAhead.MemoryCache. Reports the warm-up and refresh state of every registered refresh-ahead memory cache through Microsoft.Extensions.Diagnostics.HealthChecks.</Description>
         <PackageTags>cache;memory-cache;refresh-ahead;health-check;healthchecks;aspnetcore;diagnostics</PackageTags>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <EnablePackageValidation>true</EnablePackageValidation>
+        <PackageValidationBaselineVersion>1.1.0</PackageValidationBaselineVersion>
         <IncludeSymbols>true</IncludeSymbols>
         <SymbolPackageFormat>snupkg</SymbolPackageFormat>
         <PublishRepositoryUrl Condition="'$(GITHUB_ACTIONS)' == 'true'">true</PublishRepositoryUrl>

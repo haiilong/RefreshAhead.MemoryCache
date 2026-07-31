@@ -50,7 +50,7 @@ public abstract record RefreshAheadSchedule
             DateTimeOffset now,
             DateTimeOffset? previousScheduledRun,
             DateTimeOffset? previousCompletedRun) =>
-            (previousCompletedRun ?? now).Add(Delay);
+            AddClamped(previousCompletedRun ?? now, Delay);
     }
 
     private sealed record FixedRateSchedule : RefreshAheadSchedule
@@ -76,10 +76,16 @@ public abstract record RefreshAheadSchedule
             var elapsed = now - scheduledFrom;
             if (elapsed < TimeSpan.Zero)
             {
-                return scheduledFrom.Add(Interval);
+                return AddClamped(scheduledFrom, Interval);
             }
 
             var intervalsToSkip = elapsed.Ticks / Interval.Ticks + 1;
+            var availableTicks = (DateTimeOffset.MaxValue - scheduledFrom).Ticks;
+            if (intervalsToSkip > availableTicks / Interval.Ticks)
+            {
+                return DateTimeOffset.MaxValue;
+            }
+
             return scheduledFrom.AddTicks(intervalsToSkip * Interval.Ticks);
         }
     }
@@ -119,13 +125,16 @@ public abstract record RefreshAheadSchedule
                 0,
                 DateTimeKind.Unspecified);
 
-            var nextLocal = hourStart.Add(Offset);
-            if (nextLocal <= localNow)
+            var thisHour = hourStart.Add(Offset);
+            if (TryGetNextUtcOccurrence(thisHour, TimeZone, now, out var nextRun))
             {
-                nextLocal = hourStart.AddHours(1).Add(Offset);
+                return nextRun;
             }
 
-            return ConvertLocalToUtc(nextLocal, TimeZone);
+            var nextHour = hourStart.AddHours(1).Add(Offset);
+            return TryGetNextUtcOccurrence(nextHour, TimeZone, now, out nextRun)
+                ? nextRun
+                : ConvertLocalToUtc(nextHour, TimeZone);
         }
     }
 
@@ -145,6 +154,47 @@ public abstract record RefreshAheadSchedule
 
             return ConvertLocalToUtc(nextLocal, TimeZone);
         }
+    }
+
+    private static DateTimeOffset AddClamped(DateTimeOffset value, TimeSpan interval) =>
+        interval > DateTimeOffset.MaxValue - value ? DateTimeOffset.MaxValue : value.Add(interval);
+
+    private static bool TryGetNextUtcOccurrence(
+        DateTime localTime,
+        TimeZoneInfo timeZone,
+        DateTimeOffset now,
+        out DateTimeOffset nextRun)
+    {
+        while (timeZone.IsInvalidTime(localTime))
+        {
+            localTime = localTime.AddMinutes(1);
+        }
+
+        if (timeZone.IsAmbiguousTime(localTime))
+        {
+            var candidates = timeZone.GetAmbiguousTimeOffsets(localTime)
+                .Select(offset => new DateTimeOffset(localTime, offset).ToUniversalTime())
+                .Where(candidate => candidate > now)
+                .OrderBy(static candidate => candidate)
+                .ToArray();
+            if (candidates.Length > 0)
+            {
+                nextRun = candidates[0];
+                return true;
+            }
+        }
+        else
+        {
+            var candidate = new DateTimeOffset(localTime, timeZone.GetUtcOffset(localTime)).ToUniversalTime();
+            if (candidate > now)
+            {
+                nextRun = candidate;
+                return true;
+            }
+        }
+
+        nextRun = default;
+        return false;
     }
 
     private static DateTimeOffset ConvertLocalToUtc(DateTime localTime, TimeZoneInfo timeZone)

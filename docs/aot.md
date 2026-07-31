@@ -24,7 +24,7 @@ namespace RefreshAhead.MemoryCache;
 
 [System.CodeDom.Compiler.GeneratedCode(
     "RefreshAhead.MemoryCache.SourceGenerator",
-    "1.1.0")]
+    "1.1.1")]
 internal static class RefreshAheadMemoryCacheGeneratedRegistration
 {
     internal static IServiceCollection AddRefreshAheadMemoryCaches(

@@ -93,6 +93,32 @@ public sealed class RefreshAheadMemoryCacheServiceTests
     }
 
     [Fact]
+    public async Task RefreshLoop_SupportsIntervalsLongerThanMaximumTimerDelay()
+    {
+        // Arrange
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero));
+        var cache = new CountingCache();
+        await using var serviceProvider = CreateServiceProvider(cache);
+        var job = new RefreshAheadMemoryCacheJob(
+            "long-delay-cache",
+            RefreshAheadSchedule.FixedDelay(TimeSpan.FromDays(50)),
+            async (_, ct) => await cache.RefreshAsync(ct),
+            runImmediately: true);
+        var service = CreateService(serviceProvider, job, timeProvider);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        await cache.WaitForCountAsync(1, timeout.Token);
+        timeProvider.Advance(TimeSpan.FromDays(50));
+        await cache.WaitForCountAsync(2, timeout.Token);
+        await service.StopAsync(CancellationToken.None);
+
+        // Assert
+        cache.RefreshCount.Should().Be(2);
+    }
+
+    [Fact]
     public async Task RefreshLoop_ContinuesAfterRefreshFailure()
     {
         // Arrange
@@ -157,6 +183,25 @@ public sealed class RefreshAheadMemoryCacheServiceTests
     }
 
     [Fact]
+    public void AddRefreshAheadMemoryCaches_WhenWarmUpTimeoutIsNotPositive_FailsOptionsValidation()
+    {
+        // Arrange
+        var services = new ServiceCollection();
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.Configure<RefreshAheadMemoryCacheOptions>(options => options.WarmUpTimeout = TimeSpan.Zero);
+        services.AddRefreshAheadMemoryCaches(refresh => refresh.Every<CountingCache>(
+            TimeSpan.FromMinutes(1),
+            static (_, _) => ValueTask.CompletedTask));
+        using var serviceProvider = services.BuildServiceProvider();
+
+        // Act
+        var act = () => serviceProvider.GetServices<IHostedService>().ToArray();
+
+        // Assert
+        act.Should().Throw<OptionsValidationException>().WithMessage("*WarmUpTimeout must be greater than zero*");
+    }
+
+    [Fact]
     public async Task StartedAsync_WhenWarmUpOnStart_BlocksUntilFirstRefreshSucceeds()
     {
         // Arrange
@@ -212,10 +257,43 @@ public sealed class RefreshAheadMemoryCacheServiceTests
 
         // Assert
         var act = async () => await startedTask;
-        await act.Should().ThrowAsync<TimeoutException>();
+        await act.Should().ThrowAsync<TimeoutException>().WithMessage("*blocking-cache*");
 
         gate.SetResult();
         await service.StopAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartedAsync_WhenRefreshLoopFaults_PropagatesFailureAndStopsApplication()
+    {
+        // Arrange
+        var now = new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero);
+        var timeProvider = new ThrowingTimeProvider(now, successfulCalls: 3);
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var cache = new FailingGateCache(gate.Task);
+        var applicationLifetime = new TestHostApplicationLifetime();
+        await using var serviceProvider = CreateServiceProvider(cache, applicationLifetime);
+        var registry = new RefreshAheadMemoryCacheStatusRegistry();
+        var job = new RefreshAheadMemoryCacheJob(
+            "faulted-loop-cache",
+            RefreshAheadSchedule.FixedDelay(TimeSpan.FromSeconds(1)),
+            async (_, ct) => await cache.RefreshAsync(ct),
+            runImmediately: true,
+            warmUpOnStart: true);
+        var service = CreateService(serviceProvider, job, timeProvider, registry);
+
+        // Act
+        await service.StartAsync(CancellationToken.None);
+        var startedTask = ((IHostedLifecycleService)service).StartedAsync(CancellationToken.None);
+        gate.SetResult();
+
+        // Assert
+        var act = async () => await startedTask;
+        await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("Clock failed.");
+        applicationLifetime.ApplicationStopping.IsCancellationRequested.Should().BeTrue();
+        registry.TryGetStatus("faulted-loop-cache", out var status).Should().BeTrue();
+        status!.IsRefreshLoopFaulted.Should().BeTrue();
+        status.RefreshLoopError.Should().Be("Clock failed.");
     }
 
     [Fact]
@@ -254,6 +332,9 @@ public sealed class RefreshAheadMemoryCacheServiceTests
         status.LastError.Should().BeNull();
         status.LastFailureAt.Should().NotBeNull();
         status.LastSuccessAt.Should().NotBeNull();
+        status.LastRefreshDuration.Should().NotBeNull();
+        status.NextScheduledRunAt.Should().BeNull();
+        status.IsRefreshing.Should().BeFalse();
 
         registry.GetStatuses().Should().ContainSingle().Which.Name.Should().Be("fails-once-cache");
     }
@@ -272,11 +353,18 @@ public sealed class RefreshAheadMemoryCacheServiceTests
             Options.Create(options ?? new RefreshAheadMemoryCacheOptions()),
             NullLogger<RefreshAheadMemoryCacheService>.Instance);
 
-    private static ServiceProvider CreateServiceProvider<TCache>(TCache cache)
+    private static ServiceProvider CreateServiceProvider<TCache>(
+        TCache cache,
+        IHostApplicationLifetime? applicationLifetime = null)
         where TCache : class
     {
         var services = new ServiceCollection();
         services.AddSingleton(cache);
+        if (applicationLifetime is not null)
+        {
+            services.AddSingleton(applicationLifetime);
+        }
+
         return services.BuildServiceProvider();
     }
 
@@ -375,6 +463,43 @@ public sealed class RefreshAheadMemoryCacheServiceTests
         private readonly Guid _instanceId = Guid.NewGuid();
 
         public void RecordRefresh() => recorder.Record(_instanceId);
+    }
+
+    private sealed class FailingGateCache(Task gate)
+    {
+        public async Task RefreshAsync(CancellationToken cancellationToken)
+        {
+            await gate.WaitAsync(cancellationToken);
+            throw new InvalidOperationException("Refresh failed.");
+        }
+    }
+
+    private sealed class ThrowingTimeProvider(DateTimeOffset utcNow, int successfulCalls) : TimeProvider
+    {
+        private int _calls;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            if (Interlocked.Increment(ref _calls) > successfulCalls)
+            {
+                throw new InvalidOperationException("Clock failed.");
+            }
+
+            return utcNow;
+        }
+    }
+
+    private sealed class TestHostApplicationLifetime : IHostApplicationLifetime
+    {
+        private readonly CancellationTokenSource _stopping = new();
+
+        public CancellationToken ApplicationStarted => CancellationToken.None;
+
+        public CancellationToken ApplicationStopping => _stopping.Token;
+
+        public CancellationToken ApplicationStopped => CancellationToken.None;
+
+        public void StopApplication() => _stopping.Cancel();
     }
 
     private sealed class BlockingCache(Task refreshGate)
