@@ -18,7 +18,7 @@ internal sealed partial class RefreshAheadMemoryCacheService(
     private readonly JobRuntime[] _runtimes = jobs
         .Select(job => new JobRuntime(
             job,
-            statusRegistry.Register(job.Name, job.WarmUpOnStart),
+            statusRegistry.Register(job.Name, job.WarmUpOnStart, job.RunImmediately),
             new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)))
         .ToArray();
 

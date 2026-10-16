@@ -11,9 +11,9 @@ internal sealed class RefreshAheadMemoryCacheStatusRegistry : IRefreshAheadMemor
 {
     private readonly ConcurrentDictionary<string, StatusEntry> _entries = new(StringComparer.Ordinal);
 
-    public StatusEntry Register(string name, bool warmUpOnStart)
+    public StatusEntry Register(string name, bool warmUpOnStart, bool runImmediately)
     {
-        var entry = new StatusEntry(name, warmUpOnStart);
+        var entry = new StatusEntry(name, warmUpOnStart, runImmediately);
         if (!_entries.TryAdd(name, entry))
         {
             throw new InvalidOperationException(
@@ -44,7 +44,7 @@ internal sealed class RefreshAheadMemoryCacheStatusRegistry : IRefreshAheadMemor
     /// <summary>
     /// Mutable per-job counters guarded by a lock. Updates happen once per refresh, never on the read path.
     /// </summary>
-    internal sealed class StatusEntry(string name, bool warmUpOnStart)
+    internal sealed class StatusEntry(string name, bool warmUpOnStart, bool runImmediately)
     {
         private readonly object _gate = new();
         private bool _isRefreshing;
@@ -135,6 +135,7 @@ internal sealed class RefreshAheadMemoryCacheStatusRegistry : IRefreshAheadMemor
                 return new RefreshAheadMemoryCacheStatus
                 {
                     Name = Name,
+                    RunImmediately = runImmediately,
                     WarmUpOnStart = warmUpOnStart,
                     IsRefreshing = _isRefreshing,
                     IsRefreshLoopFaulted = _isRefreshLoopFaulted,

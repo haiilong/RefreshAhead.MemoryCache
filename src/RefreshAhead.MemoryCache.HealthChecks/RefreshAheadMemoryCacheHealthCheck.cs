@@ -83,6 +83,7 @@ public sealed class RefreshAheadMemoryCacheHealthCheck : IHealthCheck
             static status => status.Name,
             static status => (object)new Dictionary<string, object?>
             {
+                ["runImmediately"] = status.RunImmediately,
                 ["isWarm"] = status.IsWarm,
                 ["isRefreshing"] = status.IsRefreshing,
                 ["isRefreshLoopFaulted"] = status.IsRefreshLoopFaulted,
@@ -112,7 +113,10 @@ public sealed class RefreshAheadMemoryCacheHealthCheck : IHealthCheck
         var notWarm = statuses
             .Where(status =>
                 !status.IsWarm &&
-                (status.WarmUpOnStart || status.NextScheduledRunAt is null || status.NextScheduledRunAt <= now))
+                (status.WarmUpOnStart ||
+                 (status.RunImmediately && status.ConsecutiveFailures > 0) ||
+                 status.NextScheduledRunAt is null ||
+                 status.NextScheduledRunAt <= now))
             .Select(static status => status.Name)
             .ToArray();
         if (notWarm.Length > 0)

@@ -53,6 +53,42 @@ public sealed class RefreshAheadMemoryCacheHealthCheckTests
     }
 
     [Fact]
+    public async Task CheckHealthAsync_WhenRunImmediatelyFailsBeforeFirstSuccess_ReturnsFailureStatus()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero));
+        var result = await CheckAsync(
+            timeProvider,
+            cacheNames: null,
+            maxAge: null,
+            Status(
+                "hourly",
+                successCount: 0,
+                consecutiveFailures: 1,
+                nextScheduledRunAt: timeProvider.GetUtcNow().AddHours(1),
+                runImmediately: true));
+
+        result.Status.Should().Be(HealthStatus.Unhealthy);
+        result.Description.Should().Contain("hourly");
+    }
+
+    [Fact]
+    public async Task CheckHealthAsync_WhenDelayedFirstRunFails_ReturnsDegraded()
+    {
+        var timeProvider = new FakeTimeProvider(new DateTimeOffset(2026, 5, 26, 10, 0, 0, TimeSpan.Zero));
+        var result = await CheckAsync(
+            timeProvider,
+            cacheNames: null,
+            maxAge: null,
+            Status(
+                "hourly",
+                successCount: 0,
+                consecutiveFailures: 1,
+                nextScheduledRunAt: timeProvider.GetUtcNow().AddHours(1)));
+
+        result.Status.Should().Be(HealthStatus.Degraded);
+    }
+
+    [Fact]
     public async Task CheckHealthAsync_WhenWarmButLastRefreshFailed_ReturnsDegraded()
     {
         var result = await CheckAsync(
@@ -133,10 +169,12 @@ public sealed class RefreshAheadMemoryCacheHealthCheckTests
         long consecutiveFailures,
         DateTimeOffset? nextScheduledRunAt = null,
         DateTimeOffset? lastSuccessAt = null,
-        bool isRefreshLoopFaulted = false) =>
+        bool isRefreshLoopFaulted = false,
+        bool runImmediately = false) =>
         new()
         {
             Name = name,
+            RunImmediately = runImmediately,
             SuccessCount = successCount,
             ConsecutiveFailures = consecutiveFailures,
             NextScheduledRunAt = nextScheduledRunAt,

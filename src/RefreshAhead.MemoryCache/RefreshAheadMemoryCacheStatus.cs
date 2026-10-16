@@ -17,6 +17,11 @@ public sealed record RefreshAheadMemoryCacheStatus
     public bool IsWarm => SuccessCount > 0;
 
     /// <summary>
+    /// Gets whether this cache refreshes as soon as the host starts.
+    /// </summary>
+    public bool RunImmediately { get; init; }
+
+    /// <summary>
     /// Gets whether this cache must complete its first refresh before host startup completes.
     /// </summary>
     public bool WarmUpOnStart { get; init; }

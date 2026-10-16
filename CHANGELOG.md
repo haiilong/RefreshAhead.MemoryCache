@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.2 - 2026-10-16
+
+- A cache that runs immediately and fails before its first success stays unhealthy until a refresh succeeds. A later failure stays degraded.
+
 ## 1.1.1 - 2026-07-31
 
 Hardens scheduling, registration, warm-up, and health reporting after the 1.1.0 release.
