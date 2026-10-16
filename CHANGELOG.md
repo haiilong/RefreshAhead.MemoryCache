@@ -2,7 +2,16 @@
 
 ## 1.1.2 - 2026-10-16
 
-- A cache that runs immediately and fails before its first success stays unhealthy until a refresh succeeds. A later failure stays degraded.
+Keeps a cache that fails on its first immediate refresh unhealthy, and moves CI source-link packages off the vulnerable 8.0.0 Git tasks package.
+
+### Status and health
+
+- Add `RunImmediately` to `RefreshAheadMemoryCacheStatus`.
+- Report the configured failure status when a cache runs immediately, has never succeeded, and the latest refresh failed, even if the next run is still in the future. A cache that has already loaded stays degraded after a later failure. A delayed first run that has not failed yet stays healthy until it is due.
+
+### Packaging
+
+- Update `Microsoft.SourceLink.GitHub` from 8.0.0 to 10.0.402 in both packages so CI restores `Microsoft.Build.Tasks.Git` 10.0.402 instead of the vulnerable 8.0.0 package.
 
 ## 1.1.1 - 2026-07-31
 
